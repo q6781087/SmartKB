@@ -1,5 +1,7 @@
 # SmartKB 企业知识库智能问答系统
 
+![SmartKB](docs/banner.svg)
+
 .NET 10 + MAF + Semantic Kernel + PostgreSQL(pgvector) 的可私有化交付知识库问答产品。
 
 当前进度：**M1–M5 全部完成**（后端全链路 + Vue3 前端 + Docker 交付物 + OpenTelemetry），私有化部署见 `docs/部署文档.md`。

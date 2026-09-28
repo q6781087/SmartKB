@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" font-family="Segoe UI, PingFang SC, Microsoft YaHei, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0e1726"/>
+      <stop offset="1" stop-color="#14263d"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#1f6feb"/>
+      <stop offset="1" stop-color="#4d9fff"/>
+    </linearGradient>
+    <linearGradient id="logo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1f6feb"/>
+      <stop offset="1" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 背景 -->
+  <rect width="1200" height="420" fill="url(#bg)"/>
+  <g stroke="#1d3350" stroke-width="1" opacity="0.35">
+    <path d="M0 105 H1200 M0 210 H1200 M0 315 H1200"/>
+    <path d="M150 0 V420 M300 0 V420 M450 0 V420 M600 0 V420 M750 0 V420 M900 0 V420 M1050 0 V420"/>
+  </g>
+  <circle cx="1105" cy="70" r="110" fill="#1f6feb" opacity="0.07"/>
+  <circle cx="1120" cy="330" r="150" fill="#7c3aed" opacity="0.06"/>
+
+  <!-- Logo + 标题 -->
+  <rect x="60" y="62" width="72" height="72" rx="16" fill="url(#logo)"/>
+  <text x="96" y="112" text-anchor="middle" font-size="34" font-weight="700" fill="#ffffff">KB</text>
+  <text x="158" y="112" font-size="56" font-weight="700" fill="#ffffff">SmartKB</text>
+  <text x="62" y="176" font-size="24" fill="#9fb3c8">企业知识库智能问答系统</text>
+  <text x="62" y="212" font-size="16" fill="#6e8299">文档语义检索 + Excel 台账双轨 · 流式回答 · 引用溯源 · 可私有化交付</text>
+
+  <!-- 数据流水线 -->
+  <g font-size="15" fill="#d7e3f4" text-anchor="middle">
+    <g>
+      <rect x="60"  y="256" width="155" height="60" rx="10" fill="#16283f" stroke="#2c4a6e"/>
+      <text x="137" y="282">文档上传</text>
+      <text x="137" y="303" font-size="12" fill="#6e8299">MD / PDF / DOCX / XLSX</text>
+    </g>
+    <path d="M222 286 h18 m-6 -5 l6 5 l-6 5" stroke="#4d9fff" stroke-width="2" fill="none"/>
+    <g>
+      <rect x="248" y="256" width="155" height="60" rx="10" fill="#16283f" stroke="#2c4a6e"/>
+      <text x="325" y="282">解析 · 分块</text>
+      <text x="325" y="303" font-size="12" fill="#6e8299">标题路径 · 结构切分</text>
+    </g>
+    <path d="M410 286 h18 m-6 -5 l6 5 l-6 5" stroke="#4d9fff" stroke-width="2" fill="none"/>
+    <g>
+      <rect x="436" y="256" width="155" height="60" rx="10" fill="#16283f" stroke="#2c4a6e"/>
+      <text x="513" y="282">向量化</text>
+      <text x="513" y="303" font-size="12" fill="#6e8299">Agnes / GLM / Ollama</text>
+    </g>
+    <path d="M598 286 h18 m-6 -5 l6 5 l-6 5" stroke="#4d9fff" stroke-width="2" fill="none"/>
+    <g>
+      <rect x="624" y="256" width="155" height="60" rx="10" fill="#16283f" stroke="#2c4a6e"/>
+      <text x="701" y="282">pgvector</text>
+      <text x="701" y="303" font-size="12" fill="#6e8299">向量 + 台账双轨存储</text>
+    </g>
+    <path d="M786 286 h18 m-6 -5 l6 5 l-6 5" stroke="#4d9fff" stroke-width="2" fill="none"/>
+    <g>
+      <rect x="812" y="256" width="155" height="60" rx="10" fill="#16283f" stroke="#2c4a6e"/>
+      <text x="889" y="282">语义检索</text>
+      <text x="889" y="303" font-size="12" fill="#6e8299">权限过滤 · Top-K</text>
+    </g>
+    <path d="M974 286 h18 m-6 -5 l6 5 l-6 5" stroke="#4d9fff" stroke-width="2" fill="none"/>
+    <g>
+      <rect x="1000" y="256" width="140" height="60" rx="10" fill="#1a2f4d" stroke="#1f6feb" stroke-width="1.5"/>
+      <text x="1070" y="282" fill="#7ab8ff" font-weight="600">MAF Agent</text>
+      <text x="1070" y="303" font-size="12" fill="#6e8299">流式回答 · SignalR</text>
+    </g>
+  </g>
+
+  <!-- 技术栈徽章 -->
+  <g font-size="13" text-anchor="middle">
+    <g>
+      <rect x="60" y="352" width="104" height="30" rx="15" fill="none" stroke="#33517a"/>
+      <text x="112" y="372" fill="#9fb3c8">.NET 10 · MAF</text>
+    </g>
+    <g>
+      <rect x="180" y="352" width="150" height="30" rx="15" fill="none" stroke="#33517a"/>
+      <text x="255" y="372" fill="#9fb3c8">Vue 3 · Element Plus</text>
+    </g>
+    <g>
+      <rect x="346" y="352" width="158" height="30" rx="15" fill="none" stroke="#33517a"/>
+      <text x="425" y="372" fill="#9fb3c8">PostgreSQL · pgvector</text>
+    </g>
+    <g>
+      <rect x="520" y="352" width="110" height="30" rx="15" fill="none" stroke="#33517a"/>
+      <text x="575" y="372" fill="#9fb3c8">SignalR 流式</text>
+    </g>
+    <g>
+      <rect x="646" y="352" width="126" height="30" rx="15" fill="none" stroke="#33517a"/>
+      <text x="709" y="372" fill="#9fb3c8">Docker Compose</text>
+    </g>
+    <g>
+      <rect x="788" y="352" width="152" height="30" rx="15" fill="none" stroke="#33517a"/>
+      <text x="864" y="372" fill="#9fb3c8">Agnes · GLM · Ollama</text>
+    </g>
+    <g>
+      <rect x="956" y="352" width="118" height="30" rx="15" fill="none" stroke="#33517a"/>
+      <text x="1015" y="372" fill="#9fb3c8">OpenTelemetry</text>
+    </g>
+  </g>
+</svg>
