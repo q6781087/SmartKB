@@ -1,0 +1,26 @@
+# ---------- .NET ----------
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# ---------- Node / 前端 ----------
+node_modules/
+dist/
+web/.npm-cache/
+*.local
+
+# ---------- 环境与密钥（严禁入库） ----------
+.env
+.env.*
+!.env.example
+
+# ---------- 工具与临时 ----------
+.workbuddy/
+.vscode/
+*.log
+*.tmp
+SmartKB-deploy.tar.gz
+*.tar.gz
+docs/方案设计.md

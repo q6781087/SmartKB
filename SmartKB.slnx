@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SmartKB.AI/SmartKB.AI.csproj" />
+    <Project Path="src/SmartKB.Api/SmartKB.Api.csproj" />
+    <Project Path="src/SmartKB.Application/SmartKB.Application.csproj" />
+    <Project Path="src/SmartKB.Domain/SmartKB.Domain.csproj" />
+    <Project Path="src/SmartKB.Infrastructure/SmartKB.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SmartKB.Tests/SmartKB.Tests.csproj" />
+  </Folder>
+</Solution>

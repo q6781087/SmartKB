@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+**/.vs/
+**/*.user
+web/node_modules/
+web/dist/
+web/.npm-cache/
+tests/
+docs/
+.workbuddy/
+.git/

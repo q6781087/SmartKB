@@ -1,0 +1,79 @@
+### SmartKB API 联调脚本（VSCode REST Client / JetBrains HTTP Client 通用）
+
+@host = http://localhost:5219
+@token = 登录后把 token 粘贴到这里
+
+### 健康检查
+GET {{host}}/health
+
+### 登录（默认管理员）
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{ "username": "admin", "password": "SmartKB@2026" }
+
+### 当前用户
+GET {{host}}/api/auth/me
+Authorization: Bearer {{token}}
+
+### ---------- 知识库 ----------
+
+### 建库（含台账双轨 + 字段 schema）
+POST {{host}}/api/kbs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "合同库",
+  "description": "采购与销售合同",
+  "fieldSchemaJson": "[{\"name\":\"contract_no\",\"label\":\"合同编号\",\"type\":\"string\",\"filterable\":true},{\"name\":\"amount\",\"label\":\"金额\",\"type\":\"number\",\"filterable\":true}]",
+  "enableLedger": true
+}
+
+### 知识库列表
+GET {{host}}/api/kbs
+Authorization: Bearer {{token}}
+
+### ---------- 文档 ----------
+
+### 上传文档（multipart）
+POST {{host}}/api/kbs/1/documents
+Authorization: Bearer {{token}}
+Content-Type: multipart/form-data; boundary=----Boundary
+
+------Boundary
+Content-Disposition: form-data; name="file"; filename="test.docx"
+Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document
+
+< ./../../Downloads/test.docx
+------Boundary--
+
+### 文档列表（观察解析状态）
+GET {{host}}/api/kbs/1/documents
+Authorization: Bearer {{token}}
+
+### 重试失败文档
+POST {{host}}/api/kbs/1/documents/1/retry
+Authorization: Bearer {{token}}
+
+### ---------- 授权 ----------
+
+### 给用户 2 授予库 1 只读权限
+POST {{host}}/api/kbs/permissions
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "kbId": 1, "userId": 2, "roleId": null, "level": 1 }
+
+### ---------- 会话 ----------
+
+### 新建会话（之后在 /hubs/chat 用 SignalR 提问）
+POST {{host}}/api/chats
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "title": "测试会话" }
+
+### 会话历史
+GET {{host}}/api/chats/1/messages
+Authorization: Bearer {{token}}

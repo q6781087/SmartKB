@@ -1,0 +1,63 @@
+name: smartkb
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    container_name: smartkb-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-smartkb}
+      POSTGRES_USER: ${POSTGRES_USER:-smartkb}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 中设置 POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-smartkb} -d ${POSTGRES_DB:-smartkb}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: src/SmartKB.Api/Dockerfile
+    container_name: smartkb-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Default: "Host=db;Port=5432;Database=${POSTGRES_DB:-smartkb};Username=${POSTGRES_USER:-smartkb};Password=${POSTGRES_PASSWORD}"
+      Jwt__SecretKey: ${JWT_SECRET_KEY:?请在 .env 中设置 JWT_SECRET_KEY（≥32字符）}
+      SmartKB__AdminInitialPassword: ${ADMIN_INITIAL_PASSWORD:?请在 .env 中设置 ADMIN_INITIAL_PASSWORD}
+      SmartKB__StorageRoot: /app/storage
+      Llm__Mode: ${LLM_MODE:-Agnes}
+      Llm__Agnes__ApiKey: ${LLM_AGNES_API_KEY:-}
+      Llm__Agnes__BaseUrl: ${LLM_AGNES_BASE_URL:-https://apihub.agnes-ai.com/v1}
+      Llm__Agnes__ChatModel: ${LLM_AGNES_CHAT_MODEL:-agnes-3.0-flash}
+      Llm__Cloud__ApiKey: ${LLM_API_KEY:-}
+      Llm__Cloud__BaseUrl: ${LLM_BASE_URL:-https://open.bigmodel.cn/api/paas/v4}
+      Llm__Cloud__ChatModel: ${LLM_CHAT_MODEL:-glm-4.7}
+      Llm__Cloud__EmbeddingModel: ${LLM_EMBEDDING_MODEL:-embedding-3}
+      Llm__Local__BaseUrl: ${LLM_LOCAL_BASEURL:-http://host.docker.internal:11434}
+      OpenTelemetry__OtlpEndpoint: ${OTLP_ENDPOINT:-}
+    volumes:
+      - kbstorage:/app/storage
+    expose:
+      - "8080"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: smartkb-web
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-80}:80"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  kbstorage:
