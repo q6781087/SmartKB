@@ -19,11 +19,17 @@ public interface IPermissionService
     Task<List<long>?> GetAccessibleKbIdsAsync(long userId);
 }
 
-/// <summary>知识库授权：用户或角色二选一授予 Read/Manage</summary>
-public class PermissionService(SmartKbDbContext db) : IPermissionService
+/// <summary>
+/// 知识库授权：用户或角色二选一授予 Read/Manage。
+/// 写操作全部先断言目标库的 Manage 权限，堵住"给自己授权到无权库"这条绕过路径。
+/// </summary>
+public class PermissionService(SmartKbDbContext db, IKbAccessGuard guard) : IPermissionService
 {
     public async Task GrantAsync(GrantPermissionRequest request)
     {
+        // 关键：必须先对目标库有 Manage 权限，否则可自我授权击穿检索侧的权限过滤
+        await guard.AssertManageAsync(request.KbId);
+
         if (request.UserId is null && request.RoleId is null)
             throw new BusinessRuleException("必须指定授权用户或角色");
 
@@ -58,12 +64,18 @@ public class PermissionService(SmartKbDbContext db) : IPermissionService
     {
         var p = await db.Permissions.FindAsync(permissionId)
             ?? throw new BusinessRuleException("授权记录不存在");
+
+        await guard.AssertManageAsync(p.KbId);
+
         db.Permissions.Remove(p);
         await db.SaveChangesAsync();
     }
 
-    public async Task<List<PermissionDto>> GetKbPermissionsAsync(long kbId) =>
-        await db.Permissions.AsNoTracking()
+    public async Task<List<PermissionDto>> GetKbPermissionsAsync(long kbId)
+    {
+        await guard.AssertManageAsync(kbId);
+
+        return await db.Permissions.AsNoTracking()
             .Where(p => p.KbId == kbId)
             .Select(p => new PermissionDto(
                 p.Id, p.KbId, p.UserId,
@@ -71,6 +83,7 @@ public class PermissionService(SmartKbDbContext db) : IPermissionService
                 p.RoleId, p.Role != null ? p.Role.Name : null,
                 p.Level))
             .ToListAsync();
+    }
 
     public async Task<List<long>?> GetAccessibleKbIdsAsync(long userId)
     {

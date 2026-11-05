@@ -7,11 +7,19 @@
           <el-menu-item index="users">用户管理</el-menu-item>
           <el-menu-item index="roles">角色管理</el-menu-item>
           <el-menu-item index="kbs">知识库管理</el-menu-item>
+          <el-menu-item v-if="auth.isAdmin" index="tools">工具注册表</el-menu-item>
+          <el-menu-item v-if="auth.isAdmin" index="usage">AI 观测</el-menu-item>
+          <el-menu-item v-if="auth.isAdmin" index="settings">RAG 配置</el-menu-item>
+          <el-menu-item v-if="auth.isAdmin" index="audit">审计日志</el-menu-item>
         </el-menu>
       </el-aside>
       <el-main>
         <UsersPanel v-if="tab === 'users'" />
         <RolesPanel v-else-if="tab === 'roles'" />
+        <ToolsPanel v-else-if="tab === 'tools' && auth.isAdmin" />
+        <UsagePanel v-else-if="tab === 'usage' && auth.isAdmin" />
+        <SettingsPanel v-else-if="tab === 'settings' && auth.isAdmin" />
+        <AuditPanel v-else-if="tab === 'audit' && auth.isAdmin" />
         <KbPanel v-else />
       </el-main>
     </el-container>
@@ -20,10 +28,16 @@
 
 <script setup>
 import { ref } from 'vue'
+import { useAuthStore } from '../stores/auth'
 import UsersPanel from '../components/UsersPanel.vue'
 import RolesPanel from '../components/RolesPanel.vue'
 import KbPanel from '../components/KbPanel.vue'
+import ToolsPanel from '../components/ToolsPanel.vue'
+import UsagePanel from '../components/UsagePanel.vue'
+import SettingsPanel from '../components/SettingsPanel.vue'
+import AuditPanel from '../components/AuditPanel.vue'
 
+const auth = useAuthStore()
 const tab = ref('kbs')
 </script>
 

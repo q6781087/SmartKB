@@ -72,7 +72,9 @@ export const api = {
       })
     },
     retry: (kbId, id) => http.post(`/kbs/${kbId}/documents/${id}/retry`),
-    remove: (kbId, id) => http.delete(`/kbs/${kbId}/documents/${id}`)
+    remove: (kbId, id) => http.delete(`/kbs/${kbId}/documents/${id}`),
+    grants: (kbId, id) => http.get(`/kbs/${kbId}/documents/${id}/grants`),
+    setGrants: (kbId, id, d) => http.put(`/kbs/${kbId}/documents/${id}/grants`, d)
   },
 
   // 会话
@@ -80,6 +82,37 @@ export const api = {
     list: () => http.get('/chats'),
     messages: (id) => http.get(`/chats/${id}/messages`),
     remove: (id) => http.delete(`/chats/${id}`)
+  },
+
+  // AI 观测（管理员）
+  usage: {
+    summary: (days = 30) => http.get('/ai-usage/summary', { params: { days } }),
+    daily: (days = 30) => http.get('/ai-usage/daily', { params: { days } }),
+    recent: (limit = 50) => http.get('/ai-usage/recent', { params: { limit } })
+  },
+
+  // RAG / Agent 运行时配置（仅管理员）
+  settings: {
+    list: () => http.get('/settings'),
+    update: (d) => http.put('/settings', d),
+    reset: () => http.post('/settings/reset')
+  },
+
+  // 操作审计日志（仅管理员）
+  audit: {
+    list: (params) => http.get('/audit-logs', { params })
+  },
+
+  // 配置化 Agent 工具（仅管理员）
+  tools: {
+    list: () => http.get('/agent-tools'),
+    create: (d) => http.post('/agent-tools', d),
+    update: (id, d) => http.put(`/agent-tools/${id}`, d),
+    remove: (id) => http.delete(`/agent-tools/${id}`),
+    setEnabled: (id, enabled) => http.patch(`/agent-tools/${id}/enabled`, { enabled }),
+    test: (id, args) => http.post('/agent-tools/test', { id, arguments: args }),
+    grants: (id) => http.get(`/agent-tools/${id}/grants`),
+    setGrants: (id, d) => http.put(`/agent-tools/${id}/grants`, d)
   }
 }
 

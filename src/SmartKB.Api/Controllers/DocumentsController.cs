@@ -28,26 +28,38 @@ public class DocumentsController(IDocumentService documentService) : ControllerB
         return Ok(result);
     }
 
-    /// <summary>文档列表（含解析状态与分块数）</summary>
+    /// <summary>文档列表（含解析状态与分块数）；服务层断言该库读权限</summary>
     [HttpGet]
     public async Task<ActionResult<List<DocumentDto>>> GetList(long kbId)
         => Ok(await documentService.GetListAsync(kbId));
 
-    /// <summary>失败重试</summary>
+    /// <summary>失败重试（服务层绑定 kbId 与 documentId 归属）</summary>
     [HttpPost("{documentId:long}/retry")]
     [Authorize(Roles = "admin,kb_manager")]
     public async Task<IActionResult> Retry(long kbId, long documentId)
     {
-        await documentService.RetryAsync(documentId);
+        await documentService.RetryAsync(kbId, documentId);
         return Ok(new { message = "已重新排队处理" });
     }
 
-    /// <summary>删除文档（含向量与台账数据清理）</summary>
+    /// <summary>删除文档（含向量与台账数据清理；服务层绑定归属）</summary>
     [HttpDelete("{documentId:long}")]
     [Authorize(Roles = "admin,kb_manager")]
     public async Task<IActionResult> Delete(long kbId, long documentId)
     {
-        await documentService.DeleteAsync(documentId);
+        await documentService.DeleteAsync(kbId, documentId);
         return Ok(new { message = "文档已删除" });
     }
+
+    /// <summary>文档级授权查询（仅 Manage 权限；无记录 = 跟随库权限）</summary>
+    [HttpGet("{documentId:long}/grants")]
+    public async Task<ActionResult<DocumentGrantsDto>> GetGrants(long kbId, long documentId, CancellationToken ct)
+        => Ok(await documentService.GetGrantsAsync(kbId, documentId, ct));
+
+    /// <summary>全量覆盖文档级授权；传空列表即恢复"跟随库权限"</summary>
+    [HttpPut("{documentId:long}/grants")]
+    [Authorize(Roles = "admin,kb_manager")]
+    public async Task<ActionResult<DocumentGrantsDto>> SetGrants(
+        long kbId, long documentId, [FromBody] SetDocumentGrantsDto dto, CancellationToken ct)
+        => Ok(await documentService.SetGrantsAsync(kbId, documentId, dto, ct));
 }

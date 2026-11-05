@@ -13,15 +13,17 @@ public record LedgerFilter(string Field, string Op, string Value);
 /// 台账结构化查询（kb_ledger_rows，JSONB）。
 /// 安全边界：字段名必须在该库实际存在的 JSON 键白名单内（不白名单不进 SQL），
 /// 操作符只允许固定集合，值一律走参数化——LLM 产出仅作"参数"，不拼 SQL。
+/// 文档级授权（v1.6）：有授权记录的来源文档仅白名单用户/角色可查。
 /// </summary>
 public interface ILedgerQueryService
 {
     /// <summary>该库台账实际存在的字段名（取自行数据 JSON 键，供工具描述与白名单）</summary>
     Task<List<string>> GetLedgerFieldsAsync(long kbId, CancellationToken ct = default);
 
-    /// <summary>按过滤条件查询台账行（最多 maxRows 行）</summary>
+    /// <summary>按过滤条件查询台账行（最多 maxRows 行）；caller=null 视为管理员，不做文档级过滤</summary>
     Task<List<Dictionary<string, string>>> QueryAsync(
-        long kbId, IReadOnlyList<LedgerFilter> filters, int maxRows = 50, CancellationToken ct = default);
+        long kbId, IReadOnlyList<LedgerFilter> filters, int maxRows = 50,
+        Tools.ToolCaller? caller = null, CancellationToken ct = default);
 }
 
 public class LedgerQueryService(SmartKbDbContext db) : ILedgerQueryService
@@ -52,7 +54,8 @@ public class LedgerQueryService(SmartKbDbContext db) : ILedgerQueryService
     }
 
     public async Task<List<Dictionary<string, string>>> QueryAsync(
-        long kbId, IReadOnlyList<LedgerFilter> filters, int maxRows = 50, CancellationToken ct = default)
+        long kbId, IReadOnlyList<LedgerFilter> filters, int maxRows = 50,
+        Tools.ToolCaller? caller = null, CancellationToken ct = default)
     {
         if (filters.Count == 0)
             throw new ArgumentException("至少需要一个过滤条件");
@@ -61,6 +64,34 @@ public class LedgerQueryService(SmartKbDbContext db) : ILedgerQueryService
         var wheres = new List<string> { "\"KbId\" = {0}" };
         var parameters = new List<object> { kbId };
         var paramIndex = 1;
+
+        // ---------- 文档级授权：该库来源文档存在授权记录时按调用者过滤 ----------
+        if (caller is { IsAdmin: false })
+        {
+            var kbDocIds = db.Documents.AsNoTracking().Where(d => d.KbId == kbId).Select(d => d.Id);
+            var hasGrants = await db.DocumentGrants.AsNoTracking()
+                .AnyAsync(g => kbDocIds.Contains(g.DocumentId), ct);
+            if (hasGrants)
+            {
+                var roleIds = await db.Users.AsNoTracking()
+                    .Where(u => u.Id == caller.UserId)
+                    .SelectMany(u => u.Roles.Select(r => r.Id))
+                    .ToListAsync(ct);
+
+                var aclConds = new List<string> { $"\"UserId\" = {{{paramIndex}}}" };
+                parameters.Add(caller.UserId);
+                paramIndex++;
+                foreach (var roleId in roleIds)
+                {
+                    aclConds.Add($"\"RoleId\" = {{{paramIndex}}}");
+                    parameters.Add(roleId);
+                    paramIndex++;
+                }
+                var granted = $"SELECT \"DocumentId\" FROM kb_document_grants WHERE {string.Join(" OR ", aclConds)}";
+                wheres.Add($"(\"SourceDocumentId\" NOT IN (SELECT \"DocumentId\" FROM kb_document_grants) " +
+                           $"OR \"SourceDocumentId\" IN ({granted}))");
+            }
+        }
 
         foreach (var filter in filters)
         {

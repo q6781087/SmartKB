@@ -30,7 +30,7 @@ services:
       ConnectionStrings__Default: "Host=db;Port=5432;Database=${POSTGRES_DB:-smartkb};Username=${POSTGRES_USER:-smartkb};Password=${POSTGRES_PASSWORD}"
       Jwt__SecretKey: ${JWT_SECRET_KEY:?请在 .env 中设置 JWT_SECRET_KEY（≥32字符）}
       SmartKB__AdminInitialPassword: ${ADMIN_INITIAL_PASSWORD:?请在 .env 中设置 ADMIN_INITIAL_PASSWORD}
-      SmartKB__StorageRoot: /app/storage
+      SmartKB__FileStoragePath: /app/storage
       Llm__Mode: ${LLM_MODE:-Agnes}
       Llm__Agnes__ApiKey: ${LLM_AGNES_API_KEY:-}
       Llm__Agnes__BaseUrl: ${LLM_AGNES_BASE_URL:-https://apihub.agnes-ai.com/v1}
@@ -40,6 +40,37 @@ services:
       Llm__Cloud__ChatModel: ${LLM_CHAT_MODEL:-glm-4.7}
       Llm__Cloud__EmbeddingModel: ${LLM_EMBEDDING_MODEL:-embedding-3}
       Llm__Local__BaseUrl: ${LLM_LOCAL_BASEURL:-http://host.docker.internal:11434}
+      # 外部 Rerank 密钥：只允许环境变量注入，禁止写入 appsettings / 代码库
+      RAG__Rerank__Api__ApiKey: ${RERANK_API_KEY:-}
+      RAG__Rerank__Api__BaseUrl: ${RERANK_BASE_URL:-https://api.siliconflow.cn/v1}
+      RAG__Rerank__Api__Model: ${RERANK_MODEL:-BAAI/bge-reranker-v2-m3}
+      # 配置化 Agent 工具：允许的 host 白名单（逗号/分号分隔），留空表示信任后台登记的地址
+      Tools__AllowedHosts: ${TOOLS_ALLOWED_HOSTS:-}
+      # 客户自有业务系统的密钥：按后台登记的环境变量名逐行追加，例如
+      # ERP_API_TOKEN: ${ERP_API_TOKEN:-}
+      # OpenAI 兼容网关（/v1/*）：默认关闭；ApiKey 只从环境变量注入，绝不写入 appsettings
+      Gateway__Enabled: ${GATEWAY_ENABLED:-false}
+      Gateway__ApiKey: ${GATEWAY_API_KEY:-}
+      Gateway__ServiceUsername: ${GATEWAY_SERVICE_USERNAME:-}
+      Gateway__AllowSystemPrompt: ${GATEWAY_ALLOW_SYSTEM_PROMPT:-false}
+      # LDAP/AD 可选登录：默认关闭；服务账号绑定密码只走环境变量，绝不写入 appsettings
+      Ldap__Enabled: ${LDAP_ENABLED:-false}
+      Ldap__Server: ${LDAP_SERVER:-}
+      Ldap__Port: ${LDAP_PORT:-389}
+      Ldap__UseSsl: ${LDAP_USE_SSL:-false}
+      Ldap__BaseDn: ${LDAP_BASE_DN:-}
+      Ldap__SearchFilter: ${LDAP_SEARCH_FILTER:-}
+      Ldap__BindDn: ${LDAP_BIND_DN:-}
+      Ldap__BindPassword: ${LDAP_BIND_PASSWORD:-}
+      Ldap__DefaultRole: ${LDAP_DEFAULT_ROLE:-}
+      # OCR sidecar（可选）：客户自备 HTTP OCR 服务；密钥按变量名注入
+      Ocr__Enabled: ${OCR_ENABLED:-false}
+      Ocr__Endpoint: ${OCR_ENDPOINT:-}
+      Ocr__ApiKeyEnv: ${OCR_API_KEY_ENV:-}
+      # OCR_API_KEY_ENV 指向的环境变量按需注入，例如
+      # OCR_API_KEY: ${OCR_API_KEY:-}
+      # 文档队列：Memory（单实例默认）/ Database（多实例安全，SKIP LOCKED 认领）
+      SmartKB__QueueMode: ${QUEUE_MODE:-Memory}
       OpenTelemetry__OtlpEndpoint: ${OTLP_ENDPOINT:-}
     volumes:
       - kbstorage:/app/storage

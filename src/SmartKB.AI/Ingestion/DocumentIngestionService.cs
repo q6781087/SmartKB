@@ -25,6 +25,8 @@ public class DocumentIngestionService(
     TextChunker chunker,
     IEmbeddingProvider embedding,
     IOptions<LlmOptions> llmOptions,
+    Parsing.IOcrClient ocrClient,
+    IConfiguration configuration,
     ILogger<DocumentIngestionService> logger) : IDocumentIngestionService
 {
     private const int EmbedBatchSize = 32;
@@ -47,9 +49,23 @@ public class DocumentIngestionService(
             // 1. 解析
             var parsed = await parser.ParseAsync(doc.FilePath, ct);
 
-            // 2. 清理旧分块（重试场景）
-            await db.Chunks.Where(c => c.DocumentId == doc.Id).ExecuteDeleteAsync(ct);
-            await db.LedgerRows.Where(r => r.SourceDocumentId == doc.Id).ExecuteDeleteAsync(ct);
+            // 1.5 OCR 补文本（可选，默认关闭）：解析出的文本过少的 PDF 视为疑似扫描件
+            parsed = await TryOcrFallbackAsync(parsed, doc, ct);
+
+            // 2. 清理旧分块（重试场景）；InMemory provider 不支持 ExecuteDelete，走通用路径（流水线可单测）
+            if (db.Database.IsRelational())
+            {
+                await db.Chunks.Where(c => c.DocumentId == doc.Id).ExecuteDeleteAsync(ct);
+                await db.LedgerRows.Where(r => r.SourceDocumentId == doc.Id).ExecuteDeleteAsync(ct);
+            }
+            else
+            {
+                var oldChunks = await db.Chunks.Where(c => c.DocumentId == doc.Id).ToListAsync(ct);
+                db.Chunks.RemoveRange(oldChunks);
+                var oldRows = await db.LedgerRows.Where(r => r.SourceDocumentId == doc.Id).ToListAsync(ct);
+                db.LedgerRows.RemoveRange(oldRows);
+                await db.SaveChangesAsync(ct);
+            }
 
             // 3. 切分
             var chunks = chunker.Split(parsed, new ChunkOptions());
@@ -117,6 +133,39 @@ public class DocumentIngestionService(
             await db.SaveChangesAsync(ct);
             logger.LogError(ex, "文档入库失败 {DocId}", doc.Id);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// OCR 降级：解析文本过少的 PDF（疑似扫描件）调用客户自备 OCR sidecar 补文本。
+    /// 未启用或 OCR 失败都维持原解析结果——该文档随后走原有"未提取到有效文本"失败路径。
+    /// </summary>
+    private async Task<ParsedDocument> TryOcrFallbackAsync(
+        ParsedDocument parsed, KbDocument doc, CancellationToken ct)
+    {
+        try
+        {
+            var ocrOptions = Parsing.OcrOptions.FromConfiguration(configuration);
+            var textChars = parsed.Blocks.Sum(b => b.Text.Length);
+            if (!Parsing.OcrGate.ShouldAttempt(ocrOptions, doc.DocType, textChars))
+                return parsed;
+
+            logger.LogInformation("文档 {DocId} 解析文本仅 {Chars} 字符，疑似扫描件，尝试 OCR", doc.Id, textChars);
+            var text = await ocrClient.ExtractTextAsync(doc.FilePath, ct);
+            if (string.IsNullOrWhiteSpace(text))
+                return parsed;
+
+            var blocks = new List<ParsedBlock>(parsed.Blocks)
+            {
+                new("[OCR 识别文本]", text, null)
+            };
+            return parsed with { Blocks = blocks };
+        }
+        catch (Exception ex)
+        {
+            // OCR 兜底绝不能改变入库主流程的失败语义
+            logger.LogWarning(ex, "文档 {DocId} OCR 兜底异常，按原始解析结果继续", doc.Id);
+            return parsed;
         }
     }
 }

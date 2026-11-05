@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using SmartKB.AI.Agent;
+using SmartKB.AI.Tools;
+using SmartKB.Api;
 using SmartKB.Application;
 using SmartKB.Application.Dtos;
 using SmartKB.Application.Services;
@@ -12,15 +14,18 @@ namespace SmartKB.Api.Hubs;
 /// 客户端 → 服务端：Ask(sessionId, kbIds, question)
 /// 服务端 → 客户端：token（增量文本）/ citations（引用）/ done（完整回答 + sessionId）/ error
 /// 认证：JWT 通过 query string ?access_token=... 传递（WebSocket 无自定义 header）
+/// 观测：每次问答结束（成功/失败/断连）落一条 ai_invocation_logs
 /// </summary>
 [Authorize]
 public class ChatHub(
     IChatOrchestrator orchestrator,
     IChatService chat,
-    IPermissionService permissions) : Hub
+    IPermissionService permissions,
+    IAiUsageService aiUsage) : Hub
 {
     public async Task Ask(long? sessionId, List<long> kbIds, string question)
     {
+        InvocationTracker? tracker = null;
         try
         {
             var userId = Context.User!.GetUserId();
@@ -54,11 +59,15 @@ public class ChatHub(
 
             await Clients.Caller.SendAsync("session", sessionId.Value);
 
-            // 5. 流式编排 → 打字机推送
-            var deltas = orchestrator.AskStreamAsync(
-                accessible, question.Trim(), kbIds ?? [], history, Context.ConnectionAborted);
+            // 5. 流式编排 → 打字机推送（tracker 与流生命周期解耦，异常也不丢观测数据）
+            var orchestration = orchestrator.AskStreamAsync(
+                accessible,
+                new ToolCaller(userId, Context.User!.IsAdmin()),
+                question.Trim(), kbIds ?? [], history,
+                options: null, ct: Context.ConnectionAborted);
+            tracker = orchestration.Tracker;
 
-            await foreach (var delta in deltas)
+            await foreach (var delta in orchestration.Deltas)
             {
                 switch (delta.Kind)
                 {
@@ -84,6 +93,8 @@ public class ChatHub(
                         break;
 
                     case DeltaKind.Error:
+                        tracker.Success = false;
+                        tracker.ErrorMessage = delta.Text;
                         await Clients.Caller.SendAsync("error", delta.Text);
                         return;
                 }
@@ -91,16 +102,49 @@ public class ChatHub(
         }
         catch (OperationCanceledException)
         {
-            // 客户端断开，正常终止
+            // 客户端断开：不推错误，但照常落观测（Success 保持 true，回答被截断由 token 数体现）
+            if (tracker is not null) tracker.ErrorMessage = "客户端断开连接";
         }
         catch (BusinessRuleException ex)
         {
+            if (tracker is not null) { tracker.Success = false; tracker.ErrorMessage = ex.Message; }
             await Clients.Caller.SendAsync("error", ex.Message);
         }
         catch (Exception ex)
         {
             Serilog.Log.Error(ex, "问答流式处理异常 SessionId={SessionId}", sessionId);
+            if (tracker is not null) { tracker.Success = false; tracker.ErrorMessage = ex.Message; }
             await Clients.Caller.SendAsync("error", "服务处理异常，请稍后重试");
+        }
+        finally
+        {
+            // 观测落库：任何路径（成功/业务错/异常/断连）都记一条
+            if (tracker is not null && sessionId is > 0)
+            {
+                try
+                {
+                    await aiUsage.LogAsync(new Domain.Entities.AiInvocationLog
+                    {
+                        SessionId = sessionId.Value,
+                        UserId = Context.User!.GetUserId(),
+                        Model = tracker.Model,
+                        Question = question.Length > 200 ? question[..200] : question,
+                        InputTokens = tracker.InputTokens,
+                        OutputTokens = tracker.OutputTokens,
+                        TotalTokens = tracker.TotalTokens ?? tracker.InputTokens + tracker.OutputTokens,
+                        FirstTokenMs = tracker.FirstTokenMs,
+                        TotalMs = (int)(DateTimeOffset.UtcNow - tracker.StartedAt).TotalMilliseconds,
+                        ToolCalls = tracker.ToolCalls,
+                        RetrievedChunks = tracker.RetrievedChunks,
+                        Success = tracker.Success,
+                        ErrorMessage = tracker.ErrorMessage,
+                    });
+                }
+                catch (Exception logEx)
+                {
+                    Serilog.Log.Warning(logEx, "AI 调用观测落库失败 SessionId={SessionId}", sessionId);
+                }
+            }
         }
     }
 }

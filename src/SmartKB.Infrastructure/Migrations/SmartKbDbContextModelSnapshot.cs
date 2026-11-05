@@ -23,6 +23,194 @@ namespace SmartKB.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("SmartKB.Domain.Entities.AgentTool", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("AllowedKbIdsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("AuthEnvVar")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("AuthHeaderName")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("AuthValuePrefix")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("BodyTemplate")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("HttpMethod")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<int>("MaxResponseChars")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ParametersJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TimeoutSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UrlTemplate")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Enabled");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("sys_agent_tools", (string)null);
+                });
+
+            modelBuilder.Entity("SmartKB.Domain.Entities.AgentToolGrant", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("RoleId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("ToolId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("UserId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RoleId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("ToolId", "RoleId")
+                        .IsUnique();
+
+                    b.HasIndex("ToolId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("sys_agent_tool_grants", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_agent_tool_grants_target", "\"UserId\" IS NOT NULL OR \"RoleId\" IS NOT NULL");
+                        });
+                });
+
+            modelBuilder.Entity("SmartKB.Domain.Entities.AiInvocationLog", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int?>("FirstTokenMs")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("InputTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int?>("OutputTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Question")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("RetrievedChunks")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("SessionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("Success")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("ToolCalls")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TotalMs")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TotalTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("SessionId", "Id");
+
+                    b.ToTable("ai_invocation_logs", (string)null);
+                });
+
             modelBuilder.Entity("SmartKB.Domain.Entities.ChatMessage", b =>
                 {
                     b.Property<long>("Id")
@@ -182,6 +370,44 @@ namespace SmartKB.Infrastructure.Migrations
                     b.ToTable("kb_documents", (string)null);
                 });
 
+            modelBuilder.Entity("SmartKB.Domain.Entities.KbDocumentGrant", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("DocumentId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("RoleId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("UserId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RoleId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("DocumentId", "RoleId")
+                        .IsUnique();
+
+                    b.HasIndex("DocumentId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("kb_document_grants", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_document_grants_target", "\"UserId\" IS NOT NULL OR \"RoleId\" IS NOT NULL");
+                        });
+                });
+
             modelBuilder.Entity("SmartKB.Domain.Entities.KbLedgerRow", b =>
                 {
                     b.Property<long>("Id")
@@ -312,6 +538,75 @@ namespace SmartKB.Infrastructure.Migrations
                     b.ToTable("sys_roles", (string)null);
                 });
 
+            modelBuilder.Entity("SmartKB.Domain.Entities.SysAuditLog", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DurationMs")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("StatusCode")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("Success")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<long?>("UserId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("UserName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("Category", "CreatedAt");
+
+                    b.ToTable("sys_audit_logs", (string)null);
+                });
+
             modelBuilder.Entity("SmartKB.Domain.Entities.SysSetting", b =>
                 {
                     b.Property<string>("Key")
@@ -391,6 +686,44 @@ namespace SmartKB.Infrastructure.Migrations
                     b.ToTable("sys_user_roles");
                 });
 
+            modelBuilder.Entity("SmartKB.Domain.Entities.AgentToolGrant", b =>
+                {
+                    b.HasOne("SmartKB.Domain.Entities.Role", null)
+                        .WithMany()
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("SmartKB.Domain.Entities.AgentTool", null)
+                        .WithMany()
+                        .HasForeignKey("ToolId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SmartKB.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade);
+                });
+
+            modelBuilder.Entity("SmartKB.Domain.Entities.AiInvocationLog", b =>
+                {
+                    b.HasOne("SmartKB.Domain.Entities.ChatSession", "Session")
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SmartKB.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Session");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("SmartKB.Domain.Entities.ChatMessage", b =>
                 {
                     b.HasOne("SmartKB.Domain.Entities.ChatSession", "Session")
@@ -433,6 +766,25 @@ namespace SmartKB.Infrastructure.Migrations
                     b.Navigation("KnowledgeBase");
                 });
 
+            modelBuilder.Entity("SmartKB.Domain.Entities.KbDocumentGrant", b =>
+                {
+                    b.HasOne("SmartKB.Domain.Entities.KbDocument", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SmartKB.Domain.Entities.Role", null)
+                        .WithMany()
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("SmartKB.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade);
+                });
+
             modelBuilder.Entity("SmartKB.Domain.Entities.KbLedgerRow", b =>
                 {
                     b.HasOne("SmartKB.Domain.Entities.KnowledgeBase", "KnowledgeBase")
@@ -453,7 +805,7 @@ namespace SmartKB.Infrastructure.Migrations
             modelBuilder.Entity("SmartKB.Domain.Entities.KbPermission", b =>
                 {
                     b.HasOne("SmartKB.Domain.Entities.KnowledgeBase", "KnowledgeBase")
-                        .WithMany()
+                        .WithMany("Permissions")
                         .HasForeignKey("KnowledgeBaseId");
 
                     b.HasOne("SmartKB.Domain.Entities.Role", "Role")
@@ -494,6 +846,8 @@ namespace SmartKB.Infrastructure.Migrations
             modelBuilder.Entity("SmartKB.Domain.Entities.KnowledgeBase", b =>
                 {
                     b.Navigation("Documents");
+
+                    b.Navigation("Permissions");
                 });
 #pragma warning restore 612, 618
         }

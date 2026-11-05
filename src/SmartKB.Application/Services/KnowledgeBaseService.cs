@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using SmartKB.Application.Dtos;
 using SmartKB.Domain.Entities;
+using SmartKB.Domain.Enums;
 using SmartKB.Infrastructure;
 
 namespace SmartKB.Application.Services;
@@ -14,8 +15,14 @@ public interface IKnowledgeBaseService
     Task DeleteAsync(long id);
 }
 
-/// <summary>知识库管理：字段 schema 用 JSON 数组存储，保存前做结构校验</summary>
-public class KnowledgeBaseService(SmartKbDbContext db) : IKnowledgeBaseService
+/// <summary>
+/// 知识库管理：字段 schema 用 JSON 数组存储，保存前做结构校验。
+/// 变更与删除在服务层强制授权，控制器只保留角色粗筛。
+/// </summary>
+public class KnowledgeBaseService(
+    SmartKbDbContext db,
+    IKbAccessGuard guard,
+    ICurrentUser currentUser) : IKnowledgeBaseService
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { AllowTrailingCommas = true };
 
@@ -27,8 +34,9 @@ public class KnowledgeBaseService(SmartKbDbContext db) : IKnowledgeBaseService
             // 非管理员只看到被授权的库（用户直授权或角色授权）
             var roleIds = await db.Users.Where(u => u.Id == userId)
                 .SelectMany(u => u.Roles.Select(r => r.Id)).ToListAsync();
-            query = query.Where(kb => kb.Permissions.Any(p =>
-                p.UserId == userId || (p.RoleId != null && roleIds.Contains(p.RoleId.Value))));
+            query = query.Where(kb => db.Permissions.Any(p =>
+                p.KbId == kb.Id &&
+                (p.UserId == userId || (p.RoleId != null && roleIds.Contains(p.RoleId.Value)))));
         }
 
         return await query.Select(kb => new KnowledgeBaseDto(
@@ -50,13 +58,29 @@ public class KnowledgeBaseService(SmartKbDbContext db) : IKnowledgeBaseService
             EnableLedger = request.EnableLedger
         };
         db.KnowledgeBases.Add(kb);
-        await db.SaveChangesAsync();
+        await db.SaveChangesAsync(); // 先拿 kb.Id
+
+        // 非管理员建库后必须立刻拿到 Manage 授权：建库接口对 kb_manager 开放，
+        // 若依赖管理员事后补授权，服务层守卫会让创建者连自己建的库都管不了。
+        if (!currentUser.IsAdmin)
+        {
+            db.Permissions.Add(new KbPermission
+            {
+                KbId = kb.Id,
+                UserId = currentUser.UserId,
+                Level = PermissionLevel.Manage
+            });
+            await db.SaveChangesAsync();
+        }
+
         return ToDto(kb, 0);
     }
 
     public async Task<KnowledgeBaseDto> UpdateAsync(long id, SaveKnowledgeBaseRequest request)
     {
+        await guard.AssertManageAsync(id);
         ValidateSchema(request.FieldSchemaJson);
+
         var kb = await db.KnowledgeBases.Include(k => k.Documents).FirstOrDefaultAsync(k => k.Id == id)
             ?? throw new BusinessRuleException("知识库不存在");
 
@@ -72,7 +96,14 @@ public class KnowledgeBaseService(SmartKbDbContext db) : IKnowledgeBaseService
         return ToDto(kb, kb.Documents.Count);
     }
 
-    public async Task DeleteAsync(long id)
+    public Task DeleteAsync(long id)
+    {
+        // 删库是系统级操作，维持原有的"仅 admin"语义，服务层再兜一层
+        guard.AssertAdmin();
+        return DeleteCoreAsync(id);
+    }
+
+    private async Task DeleteCoreAsync(long id)
     {
         var kb = await db.KnowledgeBases
             .Include(k => k.Documents)

@@ -57,9 +57,10 @@
                 <span v-if="row.errorMessage" class="err">{{ row.errorMessage }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="140">
+            <el-table-column label="操作" width="190">
               <template #default="{ row }">
                 <el-button size="small" :disabled="row.status !== 3" @click="retry(row)">重试</el-button>
+                <el-button size="small" @click="openDocGrants(row)">授权</el-button>
                 <el-button size="small" type="danger" @click="removeDoc(row)">删除</el-button>
               </template>
             </el-table-column>
@@ -150,6 +151,33 @@
         <el-button type="primary" @click="saveKb">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 文档级授权 -->
+    <el-dialog v-model="grantingDoc" :title="`文档授权 · ${grantDocName}`" width="640px" destroy-on-close>
+      <el-alert type="info" :closable="false" show-icon class="hint-box">
+        <strong>一个都不选 = 跟随库权限</strong>，本库内所有可读用户都能看到该文档；
+        一旦选中任意用户或角色，则<strong>仅这些对象与库管理员</strong>可检索到该文档。
+        检索、台账查询与文档列表同时生效。
+      </el-alert>
+      <el-form label-width="90px" label-position="left" v-loading="grantDocLoading">
+        <el-form-item label="可见用户">
+          <el-select v-model="docGrantUserIds" multiple filterable clearable collapse-tags
+                     style="width: 100%" placeholder="不选表示不按用户限制">
+            <el-option v-for="u in docGrantUsers" :key="u.id" :label="u.label" :value="u.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="可见角色">
+          <el-select v-model="docGrantRoleIds" multiple filterable clearable collapse-tags
+                     style="width: 100%" placeholder="不选表示不按角色限制">
+            <el-option v-for="r in docGrantRoles" :key="r.id" :label="r.label" :value="r.id" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="grantingDoc = false">取消</el-button>
+        <el-button type="primary" :loading="grantDocSaving" @click="saveDocGrants">保存授权</el-button>
+      </template>
+    </el-dialog>
   </el-card>
 </template>
 
@@ -171,6 +199,17 @@ const grantUser = ref('')
 const grantRole = ref('')
 const grantLevel = ref(1)
 const kbForm = reactive({ id: null, name: '', description: '', enableLedger: true })
+
+// 文档级授权
+const grantingDoc = ref(false)
+const grantDocLoading = ref(false)
+const grantDocSaving = ref(false)
+const grantDocId = ref(null)
+const grantDocName = ref('')
+const docGrantUsers = ref([])
+const docGrantRoles = ref([])
+const docGrantUserIds = ref([])
+const docGrantRoleIds = ref([])
 
 let pollTimer = null
 
@@ -218,6 +257,43 @@ async function removeDoc(row) {
   await api.docs.remove(current.value.id, row.id)
   loadDocs()
   load()
+}
+
+// ---------- 文档级授权 ----------
+async function openDocGrants(row) {
+  grantDocId.value = row.id
+  grantDocName.value = row.fileName
+  docGrantUserIds.value = []
+  docGrantRoleIds.value = []
+  grantingDoc.value = true
+  grantDocLoading.value = true
+  try {
+    const d = await api.docs.grants(current.value.id, row.id)
+    docGrantUserIds.value = d.userIds || []
+    docGrantRoleIds.value = d.roleIds || []
+    docGrantUsers.value = d.availableUsers || []
+    docGrantRoles.value = d.availableRoles || []
+  } catch (e) {
+    ElMessage.error(e.message)
+  } finally {
+    grantDocLoading.value = false
+  }
+}
+
+async function saveDocGrants() {
+  grantDocSaving.value = true
+  try {
+    await api.docs.setGrants(current.value.id, grantDocId.value, {
+      userIds: docGrantUserIds.value,
+      roleIds: docGrantRoleIds.value
+    })
+    ElMessage.success('文档授权已保存，立即生效')
+    grantingDoc.value = false
+  } catch (e) {
+    ElMessage.error(e.message)
+  } finally {
+    grantDocSaving.value = false
+  }
 }
 
 // 存在解析中文档时轮询刷新
