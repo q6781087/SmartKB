@@ -59,7 +59,8 @@ public sealed record ChatRequestOptions(
 /// </summary>
 public class InvocationTracker(string model)
 {
-    public string Model { get; } = model;
+    /// <summary>模型名。先按部署配置兜底，StreamCoreAsync 解析运行时配置后更新（观测记录与实际调用一致）</summary>
+    public string Model { get; set; } = model;
     public DateTimeOffset StartedAt { get; } = DateTimeOffset.UtcNow;
 
     public int? InputTokens { get; set; }
@@ -118,6 +119,7 @@ public class ChatOrchestrator(
     SmartKbDbContext db,
     LlmOptions llmOptions,
     IRagSettingsProvider settingsProvider,
+    ILlmSettingsProvider llmSettingsProvider,
     IAgentToolRegistry toolRegistry,
     IHttpToolExecutor toolExecutor,
     ILogger<ChatOrchestrator> logger) : IChatOrchestrator
@@ -156,6 +158,9 @@ public class ChatOrchestrator(
     {
         // ---------- 0. 运行时配置 + 观测计时 ----------
         var settings = await settingsProvider.GetAsync(ct);
+        var llmRuntime = await llmSettingsProvider.GetAsync(ct);
+        // 观测模型名跟随运行时配置（llm.* 覆盖生效后，ai_invocation_logs 记录实际调用的模型）
+        tracker.Model = LlmDefaults.ResolveChatModel(llmOptions, llmRuntime);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         // ---------- 1. 权限范围（调用方已解析；这里只做指定库与可访问集求交） ----------

@@ -451,9 +451,6 @@ namespace SmartKB.Infrastructure.Migrations
                     b.Property<long>("KbId")
                         .HasColumnType("bigint");
 
-                    b.Property<long?>("KnowledgeBaseId")
-                        .HasColumnType("bigint");
-
                     b.Property<int>("Level")
                         .HasColumnType("integer");
 
@@ -464,8 +461,6 @@ namespace SmartKB.Infrastructure.Migrations
                         .HasColumnType("bigint");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("KnowledgeBaseId");
 
                     b.HasIndex("RoleId");
 
@@ -806,7 +801,9 @@ namespace SmartKB.Infrastructure.Migrations
                 {
                     b.HasOne("SmartKB.Domain.Entities.KnowledgeBase", "KnowledgeBase")
                         .WithMany("Permissions")
-                        .HasForeignKey("KnowledgeBaseId");
+                        .HasForeignKey("KbId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.HasOne("SmartKB.Domain.Entities.Role", "Role")
                         .WithMany()

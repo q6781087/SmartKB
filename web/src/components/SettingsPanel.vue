@@ -9,6 +9,7 @@
     <el-alert type="info" :closable="false" show-icon class="tip">
       保存后<strong>立即对新问答生效</strong>，无需重启或重新发版（各实例最多 10 秒缓存延迟）。
       数据库连接串与 LLM / Rerank 的 ApiKey <strong>只走环境变量</strong>，不在此处配置。
+      「模型」页签切换的是<strong>对话模型</strong>；Embedding 由部署配置决定（换 Embedding 模型需重建全部向量）。
     </el-alert>
 
     <el-tabs v-model="activeGroup">
@@ -28,8 +29,8 @@
           <div class="item-body">
             <el-switch v-if="item.type === 'bool'" v-model="form[item.key]" />
             <el-select v-else-if="item.type === 'enum'" v-model="form[item.key]" style="width: 220px">
-              <el-option label="Heuristic（零依赖，默认）" value="Heuristic" />
-              <el-option label="Api（外部 rerank 模型）" value="Api" />
+              <el-option v-for="opt in enumOptions[item.key] || []" :key="opt.value"
+                         :label="opt.label" :value="opt.value" />
             </el-select>
             <el-input v-else-if="item.key === 'rag.system_prompt'" v-model="form[item.key]"
                       type="textarea" :rows="10" resize="vertical" />
@@ -54,6 +55,8 @@
     <el-card shadow="never" class="section">
       <template #header>当前生效值（服务端返回）</template>
       <el-descriptions :column="4" size="small" border>
+        <el-descriptions-item label="对话模型">{{ llmModel }}</el-descriptions-item>
+        <el-descriptions-item label="模型模式">{{ llmEffective?.mode || '部署配置' }}</el-descriptions-item>
         <el-descriptions-item label="TopK">{{ effective?.topK ?? '-' }}</el-descriptions-item>
         <el-descriptions-item label="候选池">{{ effective?.candidateTopK ?? '-' }}</el-descriptions-item>
         <el-descriptions-item label="混合检索">{{ yn(effective?.hybridEnabled) }}</el-descriptions-item>
@@ -73,19 +76,43 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../api'
 
 const groups = [
+  { key: 'llm', label: '模型' },
   { key: 'prompt', label: '提示词' },
   { key: 'retrieval', label: '检索' },
   { key: 'rerank', label: '重排' },
   { key: 'generation', label: '生成' }
 ]
 
+const enumOptions = {
+  'llm.mode': [
+    { label: 'Agnes AI（默认）', value: 'Agnes' },
+    { label: 'Cloud（智谱 API）', value: 'Cloud' },
+    { label: 'Local（Ollama 本地）', value: 'Local' }
+  ],
+  'rag.rerank_provider': [
+    { label: 'Heuristic（零依赖，默认）', value: 'Heuristic' },
+    { label: 'Api（外部 rerank 模型）', value: 'Api' }
+  ]
+}
+
 const loading = ref(false)
 const saving = ref(false)
 const items = ref([])
 const effective = ref(null)
-const activeGroup = ref('retrieval')
+const llmEffective = ref(null)
+const activeGroup = ref('llm')
 const form = reactive({})
 const original = {}
+
+// 当前生效的对话模型（按模式取对应字段）
+const llmModel = computed(() => {
+  const l = llmEffective.value
+  if (!l) return '-'
+  const mode = (l.mode || '').toLowerCase()
+  if (mode === 'cloud') return l.cloudChatModel
+  if (mode === 'local') return l.localChatModel
+  return l.agnesChatModel
+})
 
 const itemsOf = (group) => items.value.filter((i) => i.group === group)
 const yn = (v) => (v == null ? '-' : v ? '开启' : '关闭')
@@ -102,6 +129,7 @@ async function load() {
     const res = await api.settings.list()
     items.value = res.items || []
     effective.value = res.effective || null
+    llmEffective.value = res.llm || null
     for (const item of items.value) {
       form[item.key] = item.value
       original[item.key] = item.value
@@ -145,7 +173,7 @@ async function save() {
 
 async function reset() {
   await ElMessageBox.confirm(
-    '将删除 sys_settings 中所有 rag.* 覆盖记录，恢复为 appsettings 默认值。已保存的提示词会丢失，确定继续？',
+    '将删除 sys_settings 中所有 rag.* 与 llm.* 覆盖记录，恢复为部署配置默认值。已保存的提示词与模型配置会丢失，确定继续？',
     '恢复默认值', { type: 'warning' }
   )
   saving.value = true

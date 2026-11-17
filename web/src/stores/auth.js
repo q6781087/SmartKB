@@ -11,9 +11,11 @@ export const useAuthStore = defineStore('auth', {
 
   getters: {
     isLoggedIn: (s) => !!s.token,
-    isAdmin: (s) => !!s.user?.isAdmin,
-    canManage: (s) =>
-      !!s.user && (s.user.isAdmin || (s.user.roles || []).includes('kb_manager'))
+    // admin 角色是唯一真相源；兼容旧登录响应里只有 isAdmin 字段的情况
+    isAdmin: (s) => !!s.user && (!!s.user.isAdmin || (s.user.roles || []).includes('admin')),
+    canManage(s) {
+      return this.isAdmin || (!!s.user && (s.user.roles || []).includes('kb_manager'))
+    }
   },
 
   actions: {

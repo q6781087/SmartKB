@@ -70,6 +70,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { api } from '../api'
 
 const loading = ref(false)
@@ -100,15 +101,19 @@ const hPct = (n) => (n > 0 ? Math.max(4, Math.round((n / maxInv.value) * 100)) +
 async function load() {
   loading.value = true
   try {
-    const [s, d, r] = await Promise.all([
+    // 三个统计相互独立：用 allSettled 避免单个接口失败让汇总、趋势、明细一起变空白
+    const [s, d, r] = await Promise.allSettled([
       api.usage.summary(days.value),
       api.usage.daily(days.value),
       api.usage.recent(50)
     ])
     // axios 响应拦截器已解包 resp.data，后端直接返回对象/数组，不能再取一次 .data
-    summary.value = s || null
-    daily.value = Array.isArray(d) ? d : []
-    recent.value = Array.isArray(r) ? r : []
+    summary.value = s.status === 'fulfilled' ? (s.value || null) : null
+    daily.value = d.status === 'fulfilled' && Array.isArray(d.value) ? d.value : []
+    recent.value = r.status === 'fulfilled' && Array.isArray(r.value) ? r.value : []
+
+    const failed = [s, d, r].find((x) => x.status === 'rejected')
+    if (failed) ElMessage.error(`部分观测数据加载失败：${failed.reason?.message || '未知错误'}`)
   } finally {
     loading.value = false
   }

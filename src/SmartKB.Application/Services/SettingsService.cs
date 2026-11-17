@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using SmartKB.AI.Configuration;
+using SmartKB.AI.Embedding;
 using SmartKB.Application.Dtos;
 using SmartKB.Domain.Entities;
 using SmartKB.Infrastructure;
@@ -9,10 +10,10 @@ using SmartKB.Infrastructure;
 namespace SmartKB.Application.Services;
 
 /// <summary>
-/// 运行时配置中心：默认值来自 appsettings 的 RAG 节，管理后台写入 sys_settings 覆盖。
-/// 只放"问答行为"参数——连接串、ApiKey 一律不走这里（仅环境变量注入）。
+/// 运行时配置中心：默认值来自 appsettings（RAG 节 + Llm 节），管理后台写入 sys_settings 覆盖。
+/// 只放"问答行为"参数与模型端点/模型名——连接串、ApiKey 一律不走这里（仅环境变量注入）。
 /// </summary>
-public interface ISettingsService : IRagSettingsProvider
+public interface ISettingsService : IRagSettingsProvider, ILlmSettingsProvider
 {
     /// <summary>后台列表：配置项元数据 + 当前生效值 + 来源</summary>
     Task<SettingsResponse> GetAllAsync(CancellationToken ct = default);
@@ -20,19 +21,28 @@ public interface ISettingsService : IRagSettingsProvider
     /// <summary>批量更新（key 必须在白名单内，值按类型与范围校验）</summary>
     Task<RagSettings> UpdateAsync(Dictionary<string, JsonElement> updates, CancellationToken ct = default);
 
-    /// <summary>恢复默认：删除所有 rag.* 覆盖记录</summary>
+    /// <summary>恢复默认：删除所有 rag.* 与 llm.* 覆盖记录</summary>
     Task<RagSettings> ResetAsync(CancellationToken ct = default);
 }
 
 public class SettingsService(
     SmartKbDbContext db,
     IConfiguration configuration,
-    SettingsCache cache) : ISettingsService
+    SettingsCache cache,
+    LlmOptions? llmOptions = null) : ISettingsService
 {
     private const string KeyPrefix = "rag.";
+    private const string LlmKeyPrefix = "llm.";
+
+    private readonly LlmOptions _llmOptions = llmOptions ?? new LlmOptions();
 
     private static readonly HashSet<string> KnownKeys =
-        RagDefaults.Descriptors.Select(d => d.Key).ToHashSet(StringComparer.Ordinal);
+        RagDefaults.Descriptors.Select(d => d.Key)
+            .Concat(LlmDefaults.Descriptors.Select(d => d.Key))
+            .ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>部署时的模型配置作为默认基线</summary>
+    private LlmRuntimeSettings BuildLlmDefaults() => LlmDefaults.FromOptions(_llmOptions);
 
     /// <summary>appsettings 的 RAG 节作为客户环境的默认基线</summary>
     private RagSettings BuildDefaults()
@@ -64,6 +74,20 @@ public class SettingsService(
     public Task<RagSettings> GetAsync(CancellationToken ct = default) =>
         cache.Get() is { } cached ? Task.FromResult(cached) : LoadAsync(ct);
 
+    public Task<LlmRuntimeSettings> GetLlmAsync(CancellationToken ct = default) =>
+        cache.GetLlm() is { } cached ? Task.FromResult(cached) : LoadLlmAsync(ct);
+
+    // ISettingsService 同时实现 IRagSettingsProvider（RagSettings）与 ILlmSettingsProvider（LlmRuntimeSettings），
+    // 两个 GetAsync 返回类型不同，LLM 侧用显式接口实现转发到 GetLlmAsync
+    Task<LlmRuntimeSettings> ILlmSettingsProvider.GetAsync(CancellationToken ct) => GetLlmAsync(ct);
+
+    private async Task<LlmRuntimeSettings> LoadLlmAsync(CancellationToken ct)
+    {
+        var overrides = await ReadOverridesAsync(ct);
+        var settings = LlmDefaults.Apply(BuildLlmDefaults(), overrides);
+        return cache.SetLlm(settings);
+    }
+
     private async Task<RagSettings> LoadAsync(CancellationToken ct)
     {
         var overrides = await ReadOverridesAsync(ct);
@@ -74,7 +98,7 @@ public class SettingsService(
     private async Task<Dictionary<string, JsonElement>> ReadOverridesAsync(CancellationToken ct)
     {
         var rows = await db.Settings.AsNoTracking()
-            .Where(s => s.Key.StartsWith(KeyPrefix))
+            .Where(s => s.Key.StartsWith(KeyPrefix) || s.Key.StartsWith(LlmKeyPrefix))
             .ToListAsync(ct);
 
         var result = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
@@ -122,27 +146,29 @@ public class SettingsService(
         var overrides = await ReadOverridesAsync(ct);
         var defaults = BuildDefaults();
         var effective = Apply(defaults, overrides);
+        var llmDefaults = BuildLlmDefaults();
+        var llmEffective = LlmDefaults.Apply(llmDefaults, overrides);
 
         var rows = await db.Settings.AsNoTracking()
-            .Where(s => s.Key.StartsWith(KeyPrefix))
+            .Where(s => s.Key.StartsWith(KeyPrefix) || s.Key.StartsWith(LlmKeyPrefix))
             .ToDictionaryAsync(s => s.Key, ct);
 
-        var items = RagDefaults.Descriptors.Select(d =>
+        var items = RagDefaults.Descriptors.Concat(LlmDefaults.Descriptors).Select(d =>
         {
             var hasOverride = overrides.TryGetValue(d.Key, out var value);
             if (!hasOverride)
-                value = DefaultValue(d.Key, defaults);
+                value = DefaultValue(d.Key, defaults, llmEffective);
             return new SettingItemDto(
                 d.Key, d.Label, d.Group, d.Type, d.Description,
                 value, hasOverride ? "database" : "default",
                 hasOverride && rows.TryGetValue(d.Key, out var row) ? row.UpdatedAt : null);
         }).ToList();
 
-        return new SettingsResponse(items, effective);
+        return new SettingsResponse(items, effective, llmEffective);
     }
 
     /// <summary>默认值的 JSON 表示（前端表单用）</summary>
-    public static JsonElement DefaultValue(string key, RagSettings s)
+    public static JsonElement DefaultValue(string key, RagSettings s, LlmRuntimeSettings? llm = null)
     {
         object? value = key switch
         {
@@ -156,6 +182,13 @@ public class SettingsService(
             "rag.rerank_top_n" => s.RerankTopN,
             "rag.temperature" => s.Temperature,
             "rag.max_output_tokens" => s.MaxOutputTokens,
+            "llm.mode" => llm?.Mode,
+            "llm.agnes.base_url" => llm?.AgnesBaseUrl,
+            "llm.agnes.chat_model" => llm?.AgnesChatModel,
+            "llm.cloud.base_url" => llm?.CloudBaseUrl,
+            "llm.cloud.chat_model" => llm?.CloudChatModel,
+            "llm.local.base_url" => llm?.LocalBaseUrl,
+            "llm.local.chat_model" => llm?.LocalChatModel,
             _ => null
         };
         return JsonSerializer.SerializeToElement(value);
@@ -169,7 +202,7 @@ public class SettingsService(
 
         foreach (var (key, value) in updates)
         {
-            var descriptor = RagDefaults.Descriptors.FirstOrDefault(d =>
+            var descriptor = AllDescriptors.FirstOrDefault(d =>
                 string.Equals(d.Key, key, StringComparison.OrdinalIgnoreCase));
             if (descriptor is null)
                 throw new BusinessRuleException($"未知配置项：{key}");
@@ -178,9 +211,9 @@ public class SettingsService(
 
         foreach (var (key, value) in updates)
         {
-            var canonicalKey = RagDefaults.Descriptors
+            var canonicalKey = AllDescriptors
                 .First(d => string.Equals(d.Key, key, StringComparison.OrdinalIgnoreCase)).Key;
-            var descriptor = RagDefaults.Descriptors.First(d => d.Key == canonicalKey);
+            var descriptor = AllDescriptors.First(d => d.Key == canonicalKey);
             var json = JsonSerializer.Serialize(value);
 
             var existing = await db.Settings.FindAsync(new object?[] { canonicalKey }, ct);
@@ -208,7 +241,9 @@ public class SettingsService(
 
     public async Task<RagSettings> ResetAsync(CancellationToken ct = default)
     {
-        var rows = await db.Settings.Where(s => s.Key.StartsWith(KeyPrefix)).ToListAsync(ct);
+        var rows = await db.Settings
+            .Where(s => s.Key.StartsWith(KeyPrefix) || s.Key.StartsWith(LlmKeyPrefix))
+            .ToListAsync(ct);
         if (rows.Count > 0)
         {
             db.Settings.RemoveRange(rows);
@@ -219,6 +254,10 @@ public class SettingsService(
     }
 
     private void Invalidate() => cache.Invalidate();
+
+    /// <summary>全部可编辑配置项（RAG 行为 + 模型配置）</summary>
+    private static IReadOnlyList<RagSettingDescriptor> AllDescriptors { get; } =
+        RagDefaults.Descriptors.Concat(LlmDefaults.Descriptors).ToList();
 
     private static void ValidateValue(RagSettingDescriptor d, JsonElement v)
     {
@@ -245,6 +284,19 @@ public class SettingsService(
                 throw new BusinessRuleException("系统提示词长度须在 1–8000 字符之间");
             case "rag.rerank_provider" when v.GetString() is not ("Heuristic" or "Api"):
                 throw new BusinessRuleException("重排实现仅支持 Heuristic 或 Api");
+            case "llm.mode" when v.GetString() is { } m &&
+                    !LlmDefaults.AllowedModes.Contains(m, StringComparer.OrdinalIgnoreCase):
+                throw new BusinessRuleException("模型模式仅支持 Agnes / Cloud / Local");
+            case "llm.agnes.base_url" or "llm.cloud.base_url" or "llm.local.base_url"
+                    when v.GetString() is not (['h', 't', 't', 'p', ':', '/', '/', ..])
+                        and not (['h', 't', 't', 'p', 's', ':', '/', '/', ..]):
+                throw new BusinessRuleException($"{d.Label} 必须以 http:// 或 https:// 开头");
+            case "llm.agnes.base_url" or "llm.cloud.base_url" or "llm.local.base_url"
+                    when string.IsNullOrWhiteSpace(v.GetString()) || v.GetString()!.Length > 500:
+                throw new BusinessRuleException($"{d.Label} 长度须在 1–500 字符之间");
+            case "llm.agnes.chat_model" or "llm.cloud.chat_model" or "llm.local.chat_model"
+                    when v.GetString() is not { Length: > 0 and <= 200 }:
+                throw new BusinessRuleException($"{d.Label} 长度须在 1–200 字符之间");
             case "rag.top_k" when v.GetInt32() is < 1 or > 30:
                 throw new BusinessRuleException("top_k 须在 1–30 之间");
             case "rag.candidate_top_k" when v.GetInt32() is < 1 or > 100:

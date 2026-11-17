@@ -2,11 +2,15 @@
   <el-card>
     <div class="toolbar">
       <h3>知识库管理</h3>
-      <el-button type="primary" @click="openEdit()">新建知识库</el-button>
+      <el-button v-if="auth.canManage" type="primary" @click="openEdit()">新建知识库</el-button>
+      <el-tag v-else type="info" size="small">当前账号无建库权限（需 admin / kb_manager 角色）</el-tag>
     </div>
 
     <!-- 知识库列表 -->
-    <el-table :data="kbs" border highlight-current-row @current-change="selectKb">
+    <el-table
+      :data="kbs" border highlight-current-row @current-change="selectKb"
+      empty-text="当前账号还没有可见的知识库：新建后请刷新列表；他人创建的库需由管理员在「授权」中授予"
+    >
       <el-table-column prop="id" label="ID" width="70" />
       <el-table-column prop="name" label="名称" width="180" />
       <el-table-column prop="description" label="说明" />
@@ -20,8 +24,8 @@
       </el-table-column>
       <el-table-column label="操作" width="160">
         <template #default="{ row }">
-          <el-button size="small" @click.stop="openEdit(row)">编辑</el-button>
-          <el-button size="small" type="danger" @click.stop="removeKb(row)">删除</el-button>
+          <el-button v-if="auth.canManage" size="small" @click.stop="openEdit(row)">编辑</el-button>
+          <el-button v-if="auth.isAdmin" size="small" type="danger" @click.stop="removeKb(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -185,6 +189,9 @@
 import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../api'
+import { useAuthStore } from '../stores/auth'
+
+const auth = useAuthStore()
 
 const kbs = ref([])
 const users = ref([])
@@ -214,11 +221,27 @@ const docGrantRoleIds = ref([])
 let pollTimer = null
 
 async function load() {
-  kbs.value = await api.kbs.list()
-  // /api/users 返回分页对象 { items, total, page, pageSize }，兼容裸数组
-  const res = await api.users.list()
-  users.value = Array.isArray(res) ? res : (res.items ?? [])
-  roles.value = await api.roles.list()
+  // 知识库列表是主数据，先单独取：后续任何辅助数据失败都不能把列表清空
+  try {
+    const res = await api.kbs.list()
+    // 后端返回数组；兼容分页对象，避免把对象喂给 el-table 后表现为"列表空"
+    kbs.value = Array.isArray(res) ? res : (res?.items ?? [])
+  } catch (e) {
+    ElMessage.error(`知识库列表加载失败：${e.message}`)
+    return
+  }
+
+  // /api/users 与 /api/roles 是 admin-only：kb_manager 请求必然 403，
+  // 未捕获的 rejection 会打断 load()，让人误以为"库没加载出来"
+  if (!auth.isAdmin) return
+  try {
+    const [res, roleList] = await Promise.all([api.users.list(), api.roles.list()])
+    // /api/users 返回分页对象 { items, total, page, pageSize }，兼容裸数组
+    users.value = Array.isArray(res) ? res : (res.items ?? [])
+    roles.value = roleList
+  } catch (e) {
+    ElMessage.error(`用户/角色列表加载失败：${e.message}`)
+  }
 }
 
 function selectKb(row) {
@@ -357,19 +380,33 @@ async function saveKb() {
     fieldSchemaJson: kbForm.id ? (current.value?.fieldSchemaJson || '[]') : '[]',
     enableLedger: kbForm.enableLedger
   }
-  if (kbForm.id) await api.kbs.update(kbForm.id, payload)
-  else await api.kbs.create(payload)
-  ElMessage.success('已保存')
-  dialog.value = false
-  load()
+  try {
+    const created = kbForm.id
+      ? await api.kbs.update(kbForm.id, payload)
+      : await api.kbs.create(payload)
+    dialog.value = false
+    await load()
+    // 新建后立即选中，避免"列表里明明有了却以为没建成功"
+    if (!kbForm.id && created?.id) selectKb(kbs.value.find((k) => k.id === created.id))
+    ElMessage.success('已保存')
+  } catch (e) {
+    // 建库被 403 / 400 拒绝时必须显式报错，否则用户以为建了、实际库里没有
+    ElMessage.error(`保存失败：${e.message}`)
+  }
 }
 
 async function removeKb(row) {
-  await ElMessageBox.confirm(`删除知识库「${row.name}」及其全部文档与向量？不可恢复！`, '危险操作', { type: 'error' })
-  await api.kbs.remove(row.id)
-  ElMessage.success('已删除')
-  if (current.value?.id === row.id) { current.value = null; docs.value = [] }
-  load()
+  try {
+    await ElMessageBox.confirm(`删除知识库「${row.name}」及其全部文档与向量？不可恢复！`, '危险操作', { type: 'error' })
+  } catch { return }
+  try {
+    await api.kbs.remove(row.id)
+    ElMessage.success('已删除')
+    if (current.value?.id === row.id) { current.value = null; docs.value = [] }
+    await load()
+  } catch (e) {
+    ElMessage.error(`删除失败：${e.message}`)
+  }
 }
 
 const typeText = (t) => ({ 1: 'Word', 2: 'PDF', 3: 'Excel', 4: 'TXT', 5: 'MD' }[t] || t)

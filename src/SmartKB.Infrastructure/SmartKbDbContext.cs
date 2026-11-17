@@ -96,6 +96,14 @@ public class SmartKbDbContext(DbContextOptions<SmartKbDbContext> options) : DbCo
         {
             e.ToTable("kb_permissions");
             e.HasIndex(x => new { x.KbId, x.UserId, x.RoleId }).IsUnique();
+
+            // 显式把 KbId 指定为外键。此前只声明了 KbId 标量 + KnowledgeBase 导航，
+            // EF 按约定另建了影子列 KnowledgeBaseId 当外键，导致 KbId 无 FK 约束、
+            // 导航永远加载不出来，删库也会留下孤儿授权记录。
+            e.HasOne(x => x.KnowledgeBase)
+                .WithMany(k => k.Permissions)
+                .HasForeignKey(x => x.KbId)
+                .OnDelete(DeleteBehavior.Cascade); // 删库时级联清理授权
         });
 
         modelBuilder.Entity<ChatSession>(e =>

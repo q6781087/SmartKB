@@ -37,7 +37,7 @@ public class TokenService(IConfiguration configuration) : ITokenService
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new(ClaimTypes.Name, user.Username),
             new("displayName", user.DisplayName),
-            new("isadmin", user.IsAdmin ? "true" : "false")
+            new("isadmin", user.IsSystemAdmin() ? "true" : "false")
         };
         claims.AddRange(user.Roles.Select(r => new Claim(ClaimTypes.Role, r.Name)));
 

@@ -45,7 +45,8 @@ public class UserService(SmartKbDbContext db) : IUserService
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
             DisplayName = request.DisplayName,
             Department = request.Department,
-            IsAdmin = request.IsAdmin,
+            // admin 角色是唯一真相源，忽略请求里的 IsAdmin（保留该字段仅为兼容旧调用方）
+            IsAdmin = roles.HasAdminRole(),
             Roles = roles
         };
         db.Users.Add(user);
@@ -58,15 +59,16 @@ public class UserService(SmartKbDbContext db) : IUserService
         var user = await db.Users.Include(u => u.Roles).FirstOrDefaultAsync(u => u.Id == id)
             ?? throw new BusinessRuleException("用户不存在");
 
-        if (!user.IsActive && !request.IsActive && user.IsAdmin)
+        if (!user.IsActive && !request.IsActive && user.IsSystemAdmin())
             throw new BusinessRuleException("不能禁用管理员账号");
+
+        var roles = await db.Roles.Where(r => request.RoleIds.Contains(r.Id)).ToListAsync();
 
         user.DisplayName = request.DisplayName;
         user.Department = request.Department;
         user.IsActive = request.IsActive;
-        user.IsAdmin = request.IsAdmin;
+        user.IsAdmin = roles.HasAdminRole(); // 与角色同步，忽略请求里的 IsAdmin
 
-        var roles = await db.Roles.Where(r => request.RoleIds.Contains(r.Id)).ToListAsync();
         user.Roles.Clear();
         foreach (var role in roles) user.Roles.Add(role);
 
@@ -101,6 +103,6 @@ public class UserService(SmartKbDbContext db) : IUserService
     }
 
     private static UserDto ToDto(User u) => new(
-        u.Id, u.Username, u.DisplayName, u.Department, u.IsAdmin, u.IsActive, u.CreatedAt,
+        u.Id, u.Username, u.DisplayName, u.Department, u.IsSystemAdmin(), u.IsActive, u.CreatedAt,
         u.Roles.Select(r => new RoleDto(r.Id, r.Name, r.Description, r.IsSystem)).ToList());
 }

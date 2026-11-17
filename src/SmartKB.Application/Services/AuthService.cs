@@ -55,7 +55,7 @@ public class AuthService(
         var token = tokenService.GenerateToken(user);
         return new LoginResponse(token, 720,
             new CurrentUserDto(user.Id, user.Username, user.DisplayName,
-                user.IsAdmin, user.Roles.Select(r => r.Name).ToList()));
+                user.IsSystemAdmin(), user.Roles.Select(r => r.Name).ToList()));
     }
 
     /// <summary>LDAP 首登自动开通：随机密码哈希（本地不可登录）+ 可选默认角色</summary>
@@ -72,7 +72,6 @@ public class AuthService(
             DisplayName = ldapUser.DisplayName,
             // 随机值哈希：本地密码路径不可登录，认证完全交给 LDAP
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(Guid.NewGuid().ToString("N")),
-            IsAdmin = false,
             IsActive = true
         };
 
@@ -83,6 +82,8 @@ public class AuthService(
             if (role is not null) user.Roles.Add(role);
         }
 
+        // 若 LDAP 默认角色被配成 admin，自动开通的账号也应拿到一致的管理员标志
+        user.IsAdmin = user.Roles.HasAdminRole();
         db.Users.Add(user);
         await db.SaveChangesAsync();
         await db.Entry(user).Collection(u => u.Roles).LoadAsync();

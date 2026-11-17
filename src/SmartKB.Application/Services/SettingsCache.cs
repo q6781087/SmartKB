@@ -13,6 +13,7 @@ public class SettingsCache
     private static readonly TimeSpan Ttl = TimeSpan.FromSeconds(10);
     private readonly object _sync = new();
     private RagSettings? _value;
+    private LlmRuntimeSettings? _llm;
     private DateTime _cachedAt;
     private int _version;
 
@@ -34,11 +35,28 @@ public class SettingsCache
         }
     }
 
+    public LlmRuntimeSettings? GetLlm()
+    {
+        lock (_sync)
+            return _llm is not null && DateTime.UtcNow - _cachedAt < Ttl ? _llm : null;
+    }
+
+    public LlmRuntimeSettings SetLlm(LlmRuntimeSettings settings)
+    {
+        lock (_sync)
+        {
+            _llm = settings with { Version = _version };
+            _cachedAt = DateTime.UtcNow;
+            return _llm;
+        }
+    }
+
     public void Invalidate()
     {
         lock (_sync)
         {
             _value = null;
+            _llm = null;
             _version++;
         }
     }

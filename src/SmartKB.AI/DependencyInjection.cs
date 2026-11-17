@@ -68,6 +68,8 @@ public static class DependencyInjection
         // 否则退化为静态默认，保证 AI 层可独立运行/单测。
         services.TryAddSingleton<Configuration.IRagSettingsProvider>(
             Configuration.StaticRagSettingsProvider.Default);
+        services.TryAddSingleton<Configuration.ILlmSettingsProvider>(
+            Configuration.StaticLlmSettingsProvider.Empty);
 
         // ---------- 重排（默认关闭；外部 API 失败自动降级启发式） ----------
         var rerankApi = new Retrieval.RerankApiOptions
@@ -91,7 +93,9 @@ public static class DependencyInjection
         services.AddScoped<Tools.IAgentToolRegistry, Tools.AgentToolRegistry>();
 
         // ---------- 问答编排 ----------
-        services.AddSingleton<IChatClient>(_ => Chat.ChatClientFactory.Create(llm));
+        // IChatClient 是可切换包装：按后台 llm.* 运行时配置构建/复用内部客户端（配置中心可热切模型）
+        services.AddSingleton<IChatClient>(sp => new Chat.SwitchableChatClient(
+            sp.GetRequiredService<IServiceScopeFactory>(), llm));
         services.AddScoped<Retrieval.IKnowledgeRetrievalService, Retrieval.KnowledgeRetrievalService>();
         services.AddScoped<Retrieval.ILedgerQueryService, Retrieval.LedgerQueryService>();
         services.AddScoped<Agent.IChatOrchestrator, Agent.ChatOrchestrator>();

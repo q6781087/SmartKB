@@ -203,14 +203,28 @@ function logout() {
   router.push('/login')
 }
 
+async function loadKbs() {
+  try { kbs.value = await api.kbs.list() }
+  catch (e) { ElMessage.error(`知识库列表加载失败：${e.message}`) }
+}
+
+// 后台另开标签页新建知识库后，切回来时刷新下拉，避免旧列表一直不更新
+function onFocusRefresh() {
+  if (document.visibilityState === 'visible') loadKbs()
+}
+
 onMounted(async () => {
   buildHub()
-  kbs.value = await api.kbs.list()
+  await loadKbs()
   loadSessions()
+  window.addEventListener('focus', onFocusRefresh)
+  document.addEventListener('visibilitychange', onFocusRefresh)
 })
 
 onBeforeUnmount(() => {
   if (hub) hub.stop()
+  window.removeEventListener('focus', onFocusRefresh)
+  document.removeEventListener('visibilitychange', onFocusRefresh)
 })
 </script>
 

@@ -8,6 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.12" />
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
@@ -19,8 +21,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\SmartKB.Api\SmartKB.Api.csproj" />
     <ProjectReference Include="..\..\src\SmartKB.Application\SmartKB.Application.csproj" />
     <ProjectReference Include="..\..\src\SmartKB.Infrastructure\SmartKB.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\SmartKB.AI\SmartKB.AI.csproj" />
+    <ProjectReference Include="..\..\src\SmartKB.Domain\SmartKB.Domain.csproj" />
   </ItemGroup>
 
 </Project>

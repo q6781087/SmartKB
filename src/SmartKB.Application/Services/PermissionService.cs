@@ -92,7 +92,7 @@ public class PermissionService(SmartKbDbContext db, IKbAccessGuard guard) : IPer
             .FirstOrDefaultAsync(u => u.Id == userId)
             ?? throw new BusinessRuleException("用户不存在");
 
-        if (user.IsAdmin) return null; // 管理员不过滤
+        if (user.IsSystemAdmin()) return null; // admin 角色（或兼容列）不过滤
 
         var roleIds = user.Roles.Select(r => r.Id).ToList();
 

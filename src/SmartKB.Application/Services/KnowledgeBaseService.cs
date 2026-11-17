@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using SmartKB.Application.Dtos;
 using SmartKB.Domain.Entities;
 using SmartKB.Domain.Enums;
@@ -58,12 +59,18 @@ public class KnowledgeBaseService(
             EnableLedger = request.EnableLedger
         };
         db.KnowledgeBases.Add(kb);
-        await db.SaveChangesAsync(); // 先拿 kb.Id
 
-        // 非管理员建库后必须立刻拿到 Manage 授权：建库接口对 kb_manager 开放，
-        // 若依赖管理员事后补授权，服务层守卫会让创建者连自己建的库都管不了。
-        if (!currentUser.IsAdmin)
+        // 「库 + 创建者 Manage 授权」必须原子落库，且不再区分是否 IsAdmin。
+        // 旧实现只在 !IsAdmin 时补授权、且分两次 SaveChanges：
+        //   1) 第二步失败会留下"库存在但没有授权"的孤儿库 —— 非管理员列表恒为空；
+        //   2) 管理员建库不留授权，账号后续被降级为普通用户后，连自己建的库都看不见。
+        // 管理员本来就不过滤列表，多一条自己的授权记录没有任何副作用。
+        await using IDbContextTransaction? tx = db.Database.IsRelational()
+            ? await db.Database.BeginTransactionAsync()
+            : null; // InMemory（单测）不支持事务
+        try
         {
+            await db.SaveChangesAsync(); // 先拿 kb.Id
             db.Permissions.Add(new KbPermission
             {
                 KbId = kb.Id,
@@ -71,6 +78,12 @@ public class KnowledgeBaseService(
                 Level = PermissionLevel.Manage
             });
             await db.SaveChangesAsync();
+            if (tx is not null) await tx.CommitAsync();
+        }
+        catch
+        {
+            if (tx is not null) await tx.RollbackAsync();
+            throw;
         }
 
         return ToDto(kb, 0);

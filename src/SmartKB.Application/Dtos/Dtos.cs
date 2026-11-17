@@ -17,6 +17,8 @@ public record LoginResponse(string Token, int ExpiresInMinutes, CurrentUserDto U
 public record UserDto(long Id, string Username, string DisplayName, string? Department,
     bool IsAdmin, bool IsActive, DateTime CreatedAt, List<RoleDto> Roles);
 
+// 请求里的 IsAdmin 仅为兼容旧调用方而保留，服务端一律忽略：
+// 是否为系统管理员由 RoleIds 中是否包含 admin 角色决定（单向真相源）。
 public record CreateUserRequest(string Username, string Password, string DisplayName,
     string? Department, bool IsAdmin, List<long> RoleIds);
 
@@ -95,7 +97,8 @@ public record SettingItemDto(
     string Key, string Label, string Group, string Type, string Description,
     JsonElement Value, string Source, DateTime? UpdatedAt);
 
-public record SettingsResponse(List<SettingItemDto> Items, RagSettings Effective);
+public record SettingsResponse(
+    List<SettingItemDto> Items, RagSettings Effective, LlmRuntimeSettings Llm);
 
 // ---------- 审计日志 ----------
 

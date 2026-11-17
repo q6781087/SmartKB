@@ -23,10 +23,11 @@ public static class DependencyInjection
         services.AddScoped<IAgentToolService, AgentToolService>();
 
         // 运行时配置中心：缓存为 Singleton，服务本身 Scoped（依赖 DbContext）。
-        // 先注册 IRagSettingsProvider，AI 层的 TryAddSingleton 不会覆盖它。
+        // 先注册 IRagSettingsProvider / ILlmSettingsProvider，AI 层的 TryAddSingleton 不会覆盖它们。
         services.AddSingleton<SettingsCache>();
         services.AddScoped<ISettingsService, SettingsService>();
         services.AddScoped<IRagSettingsProvider>(sp => sp.GetRequiredService<ISettingsService>());
+        services.AddScoped<ILlmSettingsProvider>(sp => sp.GetRequiredService<ISettingsService>());
         return services;
     }
 }

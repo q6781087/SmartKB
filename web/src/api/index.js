@@ -20,8 +20,14 @@ http.interceptors.response.use(
       auth.logout()
       router.push('/login')
     }
-    const msg = err.response?.data?.message || err.message || '请求失败'
-    return Promise.reject(new Error(msg))
+    const data = err.response?.data
+    // 业务异常 / 网关错误：{ message }；模型校验 400：ValidationProblemDetails { title, errors }
+    let msg = data?.message
+    if (!msg && data?.errors) {
+      const first = Object.values(data.errors).flat()[0]
+      msg = first || data.title
+    }
+    return Promise.reject(new Error(msg || err.message || '请求失败'))
   }
 )
 

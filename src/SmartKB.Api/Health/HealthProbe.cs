@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
+using SmartKB.AI.Configuration;
 using SmartKB.Infrastructure;
 
 namespace SmartKB.Api.Health;
@@ -37,7 +38,8 @@ public class HealthProbe(
     IConfiguration configuration,
     IHttpClientFactory httpFactory,
     HealthCheckCache cache,
-    ILogger<HealthProbe> logger) : IHealthProbe
+    ILogger<HealthProbe> logger,
+    ILlmSettingsProvider? llmSettings = null) : IHealthProbe
 {
     private const string Healthy = "healthy";
     private const string Degraded = "degraded";
@@ -168,15 +170,29 @@ public class HealthProbe(
     private async Task<List<HealthComponent>> CheckLlmAsync(CancellationToken ct)
     {
         var sw = Stopwatch.StartNew();
-        var mode = configuration["Llm:Mode"] ?? "Agnes";
+
+        // 运行时模型配置（后台 llm.* 覆盖）优先；无提供者（单测）回退部署配置
+        LlmRuntimeSettings? runtime = null;
+        if (llmSettings is not null)
+            runtime = await llmSettings.GetAsync(ct);
+        runtime ??= LlmRuntimeSettings.Empty;
+
+        var mode = string.IsNullOrWhiteSpace(runtime.Mode)
+            ? configuration["Llm:Mode"] ?? "Agnes"
+            : runtime.Mode;
         var local = mode.Equals("Local", StringComparison.OrdinalIgnoreCase);
         var agnes = mode.Equals("Agnes", StringComparison.OrdinalIgnoreCase);
 
+        string Or(string runtimeValue, string configKey, string fallback) =>
+            string.IsNullOrWhiteSpace(runtimeValue)
+                ? configuration[configKey] ?? fallback
+                : runtimeValue.Trim();
+
         var baseUrl = local
-            ? configuration["Llm:Local:BaseUrl"] ?? "http://localhost:11434"
+            ? Or(runtime.LocalBaseUrl, "Llm:Local:BaseUrl", "http://localhost:11434")
             : agnes
-                ? configuration["Llm:Agnes:BaseUrl"] ?? "https://apihub.agnes-ai.com/v1"
-                : configuration["Llm:Cloud:BaseUrl"] ?? "https://open.bigmodel.cn/api/paas/v4";
+                ? Or(runtime.AgnesBaseUrl, "Llm:Agnes:BaseUrl", "https://apihub.agnes-ai.com/v1")
+                : Or(runtime.CloudBaseUrl, "Llm:Cloud:BaseUrl", "https://open.bigmodel.cn/api/paas/v4");
         var apiKey = agnes
             ? configuration["Llm:Agnes:ApiKey"] ?? ""
             : configuration["Llm:Cloud:ApiKey"] ?? "";

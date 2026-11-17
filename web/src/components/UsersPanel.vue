@@ -46,8 +46,11 @@
         <el-form-item label="部门">
           <el-input v-model="form.department" />
         </el-form-item>
+        <el-form-item label="状态">
+          <el-switch v-model="form.isActive" active-text="启用" inactive-text="停用" />
+        </el-form-item>
         <el-form-item label="管理员">
-          <el-switch v-model="form.isAdmin" />
+          <span class="hint">由角色决定：勾选下方 <b>admin</b> 角色即为系统管理员</span>
         </el-form-item>
         <el-form-item label="角色">
           <el-select v-model="form.roleIds" multiple style="width:100%">
@@ -71,7 +74,7 @@ import { api } from '../api'
 const users = ref([])
 const roles = ref([])
 const dialog = ref(false)
-const form = reactive({ id: null, username: '', password: '', displayName: '', department: '', isAdmin: false, roleIds: [] })
+const form = reactive({ id: null, username: '', password: '', displayName: '', department: '', isActive: true, roleIds: [] })
 
 async function load() {
   // /api/users 返回分页对象 { items, total, page, pageSize }，兼容裸数组
@@ -83,8 +86,8 @@ async function load() {
 function openEdit(row) {
   Object.assign(form, row
     ? { id: row.id, username: row.username, password: '', displayName: row.displayName,
-        department: row.department, isAdmin: row.isAdmin, roleIds: (row.roles || []).map((r) => r.id) }
-    : { id: null, username: '', password: '', displayName: '', department: '', isAdmin: false, roleIds: [] })
+        department: row.department, isActive: row.isActive, roleIds: (row.roles || []).map((r) => r.id) }
+    : { id: null, username: '', password: '', displayName: '', department: '', isActive: true, roleIds: [] })
   dialog.value = true
 }
 
@@ -93,12 +96,12 @@ async function save() {
     if (form.id) {
       await api.users.update(form.id, {
         displayName: form.displayName, department: form.department || null,
-        isActive: true, isAdmin: form.isAdmin, roleIds: form.roleIds
+        isActive: form.isActive, roleIds: form.roleIds
       })
     } else {
       await api.users.create({
         username: form.username, password: form.password, displayName: form.displayName,
-        department: form.department || null, isAdmin: form.isAdmin, roleIds: form.roleIds
+        department: form.department || null, roleIds: form.roleIds
       })
     }
     ElMessage.success('已保存')
@@ -108,16 +111,46 @@ async function save() {
 }
 
 async function resetPwd(row) {
-  const { value } = await ElMessageBox.prompt(`为「${row.displayName}」设置新密码：`, '重置密码', { inputType: 'password' })
-  await api.users.resetPassword(row.id, { newPassword: value })
-  ElMessage.success('密码已重置')
+  let value
+  try {
+    // 前端先做与后端一致的校验（后端 ValidatePassword 要求至少 8 位），
+    // 避免提交后 400 却看不到原因
+    ;({ value } = await ElMessageBox.prompt(
+      `为「${row.displayName}」设置新密码（至少 8 位）：`, '重置密码',
+      {
+        inputType: 'password',
+        inputValidator: (v) => (v && v.length >= 8 ? true : '密码长度至少 8 位'),
+        inputErrorMessage: '密码长度至少 8 位'
+      }
+    ))
+  } catch (e) {
+    // 点取消 / 关闭弹窗不需要报错
+    if (e === 'cancel' || e === 'close' || e?.message === 'cancel') return
+    ElMessage.error(e.message)
+    return
+  }
+
+  try {
+    await api.users.resetPassword(row.id, { newPassword: value })
+    ElMessage.success('密码已重置')
+  } catch (e) {
+    ElMessage.error(e.message)
+  }
 }
 
 async function remove(row) {
-  await ElMessageBox.confirm(`删除用户「${row.displayName}」？`, '确认', { type: 'warning' })
-  await api.users.remove(row.id)
-  ElMessage.success('已删除')
-  load()
+  try {
+    await ElMessageBox.confirm(`删除用户「${row.displayName}」？`, '确认', { type: 'warning' })
+  } catch {
+    return
+  }
+  try {
+    await api.users.remove(row.id)
+    ElMessage.success('已删除')
+    load()
+  } catch (e) {
+    ElMessage.error(e.message)
+  }
 }
 
 onMounted(load)
@@ -126,4 +159,5 @@ onMounted(load)
 <style scoped>
 .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .toolbar h3 { margin: 0; }
+.hint { color: #909399; font-size: 12px; line-height: 1.6; }
 </style>

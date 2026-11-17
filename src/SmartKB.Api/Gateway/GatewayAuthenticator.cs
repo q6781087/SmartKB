@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using SmartKB.Api;
+using SmartKB.Domain.Entities;
 using SmartKB.Infrastructure;
 
 namespace SmartKB.Api.Gateway;
@@ -43,13 +45,14 @@ public class GatewayAuthenticator(
         if (_options.Configured && KeyEquals(supplied, _options.ApiKey))
         {
             var account = await db.Users.AsNoTracking()
+                .Include(u => u.Roles)
                 .FirstOrDefaultAsync(u => u.Username == _options.ServiceUsername && u.IsActive, ct);
             if (account is null)
             {
                 logger.LogError("网关绑定的服务账号 {User} 不存在或已禁用", _options.ServiceUsername);
                 throw new GatewayConfigurationException("网关服务账号不存在或已禁用，请联系管理员");
             }
-            return new GatewayIdentity(account.Id, account.Username, account.IsAdmin);
+            return new GatewayIdentity(account.Id, account.Username, account.IsSystemAdmin());
         }
 
         // 兜底：复用现有 JwtBearer 校验参数，不重复实现签名验证
@@ -63,7 +66,7 @@ public class GatewayAuthenticator(
         return new GatewayIdentity(
             userId,
             result.Principal.Identity?.Name ?? "jwt-user",
-            result.Principal.FindFirstValue("isadmin") == "true");
+            result.Principal.IsAdmin());
     }
 
     private static string? ExtractBearer(HttpContext http)

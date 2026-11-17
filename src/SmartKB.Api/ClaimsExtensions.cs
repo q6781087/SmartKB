@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using SmartKB.Domain.Entities;
 
 namespace SmartKB.Api;
 
@@ -11,6 +12,10 @@ public static class ClaimsExtensions
             ? id
             : throw new UnauthorizedAccessException("Token 中缺少用户标识");
 
+    /// <summary>
+    /// 系统管理员判定：admin 角色是唯一真相源，同时兼容旧 token 里的 isadmin claim。
+    /// 控制器 [Authorize(Roles="admin")] 与业务层守卫必须走同一判定，不再出现错配。
+    /// </summary>
     public static bool IsAdmin(this ClaimsPrincipal user) =>
-        user.FindFirstValue("isadmin") == "true";
+        user.FindFirstValue("isadmin") == "true" || user.IsInRole(SystemRoles.Admin);
 }

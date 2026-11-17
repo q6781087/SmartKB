@@ -58,17 +58,30 @@ public class AiUsageService(SmartKbDbContext db) : IAiUsageService
     public async Task<List<AiDailyUsageDto>> GetDailyAsync(int days = 30)
     {
         var since = DateTime.UtcNow.AddDays(-days);
-        return await db.AiInvocationLogs.AsNoTracking()
+
+        // EF Core + Npgsql 无法把 GroupBy(new DateTime(年,月,日)) + 条件投影翻译成 SQL，
+        // 在 PostgreSQL 上会抛 InvalidOperationException，导致 /api/ai-usage/daily 直接 500。
+        // 改为只投影聚合所需的 4 列，在内存中按 UTC 日期分组：
+        // 每行仅 4 个标量、天数受 days(≤365) 约束，关系型 / InMemory 行为一致且可单测。
+        var rows = await db.AiInvocationLogs.AsNoTracking()
             .Where(l => l.CreatedAt >= since)
-            .GroupBy(l => new DateTime(l.CreatedAt.Year, l.CreatedAt.Month, l.CreatedAt.Day))
-            .Select(g => new AiDailyUsageDto(
-                g.Key,
-                g.Count(),
-                g.Count(x => !x.Success),
-                g.Sum(x => (long?)x.TotalTokens ?? 0) == 0 ? null : g.Sum(x => (long?)x.TotalTokens ?? 0),
-                g.Average(x => (double?)x.TotalMs)))
-            .OrderBy(d => d.Date)
+            .Select(l => new { l.CreatedAt, l.Success, l.TotalTokens, l.TotalMs })
             .ToListAsync();
+
+        return rows
+            .GroupBy(l => l.CreatedAt.Date)
+            .OrderBy(g => g.Key)
+            .Select(g =>
+            {
+                var tokens = g.Sum(x => (long)(x.TotalTokens ?? 0));
+                return new AiDailyUsageDto(
+                    g.Key,
+                    g.Count(),
+                    g.Count(x => !x.Success),
+                    tokens > 0 ? tokens : null,
+                    g.Average(x => (double)x.TotalMs));
+            })
+            .ToList();
     }
 
     public async Task<List<AiInvocationDto>> GetRecentAsync(int limit = 50) =>

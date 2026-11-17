@@ -57,5 +57,19 @@ public static class DependencyInjection
             });
             await db.SaveChangesAsync();
         }
+
+        // 存量数据自愈：把 sys_users.IsAdmin 刷成与 admin 角色一致。
+        // 统一之前这两个值可独立设置，历史库里可能存在"挂了 admin 角色却 IsAdmin=false"
+        // 或"IsAdmin=true 却没有 admin 角色"的错配账号，登录后会表现成权限莫名其妙。
+        var allUsers = await db.Users.Include(u => u.Roles).ToListAsync();
+        var changed = false;
+        foreach (var u in allUsers)
+        {
+            var expected = u.Roles.HasAdminRole();
+            if (u.IsAdmin == expected) continue;
+            u.IsAdmin = expected;
+            changed = true;
+        }
+        if (changed) await db.SaveChangesAsync();
     }
 }
